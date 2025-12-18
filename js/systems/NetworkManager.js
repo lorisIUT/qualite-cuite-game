@@ -58,9 +58,15 @@ export class NetworkManager {
         this.sessionCode = this.generateSessionCode();
 
         return new Promise((resolve, reject) => {
-            // Crée le peer avec l'ID = code de session
+            // Crée le peer avec l'ID = code de session et config ICE
             this.peer = new Peer(this.sessionCode, {
-                debug: 1
+                debug: 2,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
             });
 
             this.peer.on('open', (id) => {
@@ -110,24 +116,47 @@ export class NetworkManager {
         return new Promise((resolve, reject) => {
             let connectionResolved = false;
 
-            // Crée un peer avec un ID aléatoire
+            const handleError = (err, message) => {
+                if (connectionResolved) return;
+                connectionResolved = true;
+                console.error(message, err);
+                this.state = NetworkState.DISCONNECTED;
+                this.notifyStateChange();
+                this.disconnect();
+                reject(err);
+            };
+
+            // Crée un peer avec config ICE explicite pour aider avec NAT
             this.peer = new Peer({
-                debug: 1
+                debug: 2,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
             });
 
-            this.peer.on('open', () => {
-                console.log('Client peer ready, connecting to host:', this.sessionCode);
+            this.peer.on('open', (id) => {
+                console.log('Client peer ready with ID:', id);
+                console.log('Attempting to connect to host:', this.sessionCode);
 
                 // Se connecte à l'host
                 this.connection = this.peer.connect(this.sessionCode, {
-                    reliable: true
+                    reliable: true,
+                    serialization: 'json'
                 });
+
+                if (!this.connection) {
+                    handleError(new Error('Failed to create connection'), 'Connection creation failed');
+                    return;
+                }
 
                 this.connection.on('open', () => {
                     if (connectionResolved) return;
                     connectionResolved = true;
 
-                    console.log('Connected to host!');
+                    console.log('✓ Connected to host successfully!');
                     this.setupConnectionHandlers();
                     this.state = NetworkState.CONNECTED;
                     this.notifyStateChange();
@@ -135,34 +164,32 @@ export class NetworkManager {
                 });
 
                 this.connection.on('error', (err) => {
-                    if (connectionResolved) return;
-                    connectionResolved = true;
-
-                    console.error('Connection error:', err);
-                    this.state = NetworkState.DISCONNECTED;
-                    this.notifyStateChange();
-                    reject(err);
+                    handleError(err, 'Connection error:');
                 });
+
+                // Timeout spécifique pour la connexion au pair
+                setTimeout(() => {
+                    if (!connectionResolved && this.connection && !this.connection.open) {
+                        handleError(new Error('Peer connection timeout - host may not exist'), 'Peer timeout:');
+                    }
+                }, 10000);
             });
 
             this.peer.on('error', (err) => {
-                if (connectionResolved) return;
-                connectionResolved = true;
-
-                console.error('Peer error:', err);
-                this.state = NetworkState.DISCONNECTED;
-                this.notifyStateChange();
-                reject(err);
+                // Erreur spécifique si le peer n'existe pas
+                if (err.type === 'peer-unavailable') {
+                    handleError(new Error('Code de session invalide'), 'Host not found:');
+                } else {
+                    handleError(err, 'Peer error:');
+                }
             });
 
-            // Timeout après 15 secondes (augmenté)
+            // Timeout global
             setTimeout(() => {
                 if (!connectionResolved && this.state === NetworkState.CONNECTING) {
-                    connectionResolved = true;
-                    this.disconnect();
-                    reject(new Error('Connection timeout'));
+                    handleError(new Error('Connection timeout'), 'Global timeout:');
                 }
-            }, 15000);
+            }, 20000);
         });
     }
 

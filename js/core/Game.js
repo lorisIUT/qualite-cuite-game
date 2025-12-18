@@ -82,6 +82,7 @@ export class Game {
         // Lobby
         this.joinCodeInput = '';
         this.lobbyError = null;
+        this.inputDelay = false; // Prevent E key from being captured immediately
 
         // Feedback visuel
         this.feedbackMessage = null;
@@ -462,7 +463,10 @@ export class Game {
     async start() {
         // Configure la saisie de texte pour le code
         window.addEventListener('keydown', (e) => {
-            if (this.menuState === MenuState.LOBBY_JOIN) {
+            if (this.menuState === MenuState.LOBBY_JOIN && !this.inputDelay) {
+                // Ignore E key (used for menu interaction)
+                if (e.key.toLowerCase() === 'e') return;
+
                 if (e.key.length === 1 && e.key.match(/[a-zA-Z0-9]/)) {
                     if (this.joinCodeInput.length < 6) {
                         this.joinCodeInput += e.key.toUpperCase();
