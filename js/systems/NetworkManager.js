@@ -108,13 +108,15 @@ export class NetworkManager {
         this.notifyStateChange();
 
         return new Promise((resolve, reject) => {
+            let connectionResolved = false;
+
             // Crée un peer avec un ID aléatoire
             this.peer = new Peer({
                 debug: 1
             });
 
             this.peer.on('open', () => {
-                console.log('Connecting to host:', this.sessionCode);
+                console.log('Client peer ready, connecting to host:', this.sessionCode);
 
                 // Se connecte à l'host
                 this.connection = this.peer.connect(this.sessionCode, {
@@ -122,6 +124,9 @@ export class NetworkManager {
                 });
 
                 this.connection.on('open', () => {
+                    if (connectionResolved) return;
+                    connectionResolved = true;
+
                     console.log('Connected to host!');
                     this.setupConnectionHandlers();
                     this.state = NetworkState.CONNECTED;
@@ -130,6 +135,9 @@ export class NetworkManager {
                 });
 
                 this.connection.on('error', (err) => {
+                    if (connectionResolved) return;
+                    connectionResolved = true;
+
                     console.error('Connection error:', err);
                     this.state = NetworkState.DISCONNECTED;
                     this.notifyStateChange();
@@ -138,19 +146,23 @@ export class NetworkManager {
             });
 
             this.peer.on('error', (err) => {
+                if (connectionResolved) return;
+                connectionResolved = true;
+
                 console.error('Peer error:', err);
                 this.state = NetworkState.DISCONNECTED;
                 this.notifyStateChange();
                 reject(err);
             });
 
-            // Timeout après 10 secondes
+            // Timeout après 15 secondes (augmenté)
             setTimeout(() => {
-                if (this.state === NetworkState.CONNECTING) {
+                if (!connectionResolved && this.state === NetworkState.CONNECTING) {
+                    connectionResolved = true;
                     this.disconnect();
                     reject(new Error('Connection timeout'));
                 }
-            }, 10000);
+            }, 15000);
         });
     }
 

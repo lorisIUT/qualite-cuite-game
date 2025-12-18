@@ -15,6 +15,7 @@ import { NetworkManager, NetworkRole, NetworkState } from '../systems/NetworkMan
 // États du menu
 const MenuState = {
     MAIN: 'main',
+    SOLO_MENU: 'soloMenu',
     HIGH_SCORES: 'highScores',
     MULTI_MENU: 'multiMenu',
     LOBBY_HOST: 'lobbyHost',
@@ -206,10 +207,15 @@ export class Game {
         if (this.levelManager.state !== LevelState.MENU) return;
 
         if (this.menuState === MenuState.MAIN) {
-            // 4 options: Solo, Multi, High Scores
+            // 3 options: Solo, Multi, High Scores
             this.selectedOption += direction;
-            if (this.selectedOption < 0) this.selectedOption = 3;
-            if (this.selectedOption > 3) this.selectedOption = 0;
+            if (this.selectedOption < 0) this.selectedOption = 2;
+            if (this.selectedOption > 2) this.selectedOption = 0;
+        } else if (this.menuState === MenuState.SOLO_MENU) {
+            // 3 difficultés
+            this.selectedOption += direction;
+            if (this.selectedOption < 0) this.selectedOption = 2;
+            if (this.selectedOption > 2) this.selectedOption = 0;
         } else if (this.menuState === MenuState.MULTI_MENU) {
             // 2 options: Créer, Rejoindre
             this.selectedOption += direction;
@@ -285,9 +291,9 @@ export class Game {
     handleMenuInteraction() {
         if (this.menuState === MenuState.MAIN) {
             if (this.selectedOption === 0) {
-                // Solo - sélection difficulté directe (simplifié)
-                this.gameMode = GameMode.SOLO;
-                this.startSoloGame(Difficulty.MEDIUM);
+                // Solo - aller au menu de sélection de difficulté
+                this.menuState = MenuState.SOLO_MENU;
+                this.selectedOption = 1; // Moyen par défaut
             } else if (this.selectedOption === 1) {
                 // Multijoueur
                 this.menuState = MenuState.MULTI_MENU;
@@ -296,11 +302,11 @@ export class Game {
                 // High Scores
                 this.menuState = MenuState.HIGH_SCORES;
                 this.highScoresDifficulty = 0;
-            } else if (this.selectedOption === 3) {
-                // Difficulté toggle pour solo
-                this.gameMode = GameMode.SOLO;
-                this.startSoloGame(Difficulty.HARD);
             }
+        } else if (this.menuState === MenuState.SOLO_MENU) {
+            // Lancer la partie avec la difficulté sélectionnée
+            this.gameMode = GameMode.SOLO;
+            this.startSoloGame(this.difficulties[this.selectedOption]);
         } else if (this.menuState === MenuState.MULTI_MENU) {
             if (this.selectedOption === 0) {
                 // Créer partie
@@ -603,6 +609,9 @@ export class Game {
             case MenuState.MAIN:
                 this.renderMenu();
                 break;
+            case MenuState.SOLO_MENU:
+                this.renderSoloMenu();
+                break;
             case MenuState.MULTI_MENU:
                 this.renderMultiMenu();
                 break;
@@ -637,16 +646,15 @@ export class Game {
         this.ctx.fillText('CUITE GAME', this.width / 2, 90);
         this.ctx.shadowBlur = 0;
 
-        // Options
+        // Options (3 choix)
         const options = [
             { label: '🎮 SOLO', color: '#4caf50' },
             { label: '👥 MULTIJOUEUR', color: '#2196f3' },
-            { label: '🏆 HIGH SCORES', color: '#9c27b0' },
-            { label: '💀 SOLO DIFFICILE', color: '#f44336' }
+            { label: '🏆 HIGH SCORES', color: '#9c27b0' }
         ];
 
-        const startY = 180;
-        const spacing = 55;
+        const startY = 200;
+        const spacing = 70;
 
         options.forEach((opt, index) => {
             const y = startY + index * spacing;
@@ -654,11 +662,11 @@ export class Game {
 
             this.ctx.fillStyle = isSelected ? opt.color : 'rgba(255,255,255,0.1)';
             this.ctx.beginPath();
-            this.ctx.roundRect(this.width / 2 - 140, y - 20, 280, 40, 10);
+            this.ctx.roundRect(this.width / 2 - 140, y - 22, 280, 44, 10);
             this.ctx.fill();
 
             this.ctx.fillStyle = isSelected ? '#fff' : '#888';
-            this.ctx.font = '11px "Press Start 2P", monospace';
+            this.ctx.font = '12px "Press Start 2P", monospace';
             this.ctx.fillText(opt.label, this.width / 2, y);
 
             if (isSelected) {
@@ -671,6 +679,61 @@ export class Game {
         this.ctx.fillStyle = '#666';
         this.ctx.font = '8px "Press Start 2P", monospace';
         this.ctx.fillText('Z/S naviguer - E sélectionner', this.width / 2, 460);
+    }
+
+    /**
+     * Rendu du menu de sélection de difficulté solo
+     */
+    renderSoloMenu() {
+        this.ctx.fillStyle = '#1a1a2e';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        // Titre
+        this.ctx.fillStyle = '#4caf50';
+        this.ctx.font = '16px "Press Start 2P", monospace';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('🎮 MODE SOLO', this.width / 2, 70);
+
+        this.ctx.fillStyle = '#888';
+        this.ctx.font = '10px "Press Start 2P", monospace';
+        this.ctx.fillText('Choisis ta difficulté', this.width / 2, 110);
+
+        const startY = 180;
+        const spacing = 80;
+
+        this.difficulties.forEach((diff, index) => {
+            const config = DifficultyConfig[diff];
+            const y = startY + index * spacing;
+            const isSelected = index === this.selectedOption;
+            const bestScore = this.scoreManager.getBestScore(diff);
+
+            // Fond
+            this.ctx.fillStyle = isSelected ? config.color : 'rgba(255,255,255,0.1)';
+            this.ctx.beginPath();
+            this.ctx.roundRect(this.width / 2 - 140, y - 28, 280, 56, 10);
+            this.ctx.fill();
+
+            // Nom de la difficulté
+            this.ctx.fillStyle = isSelected ? '#fff' : '#888';
+            this.ctx.font = '14px "Press Start 2P", monospace';
+            this.ctx.fillText(config.name, this.width / 2, y - 5);
+
+            // Record
+            this.ctx.font = '8px "Press Start 2P", monospace';
+            this.ctx.fillStyle = isSelected ? '#ffd700' : '#666';
+            this.ctx.fillText(`Record: ${bestScore} pts`, this.width / 2, y + 15);
+
+            if (isSelected) {
+                this.ctx.fillStyle = '#fff';
+                this.ctx.fillText('▶', this.width / 2 - 125, y - 5);
+                this.ctx.fillText('◀', this.width / 2 + 125, y - 5);
+            }
+        });
+
+        // Instructions
+        this.ctx.fillStyle = '#666';
+        this.ctx.font = '8px "Press Start 2P", monospace';
+        this.ctx.fillText('Z/S naviguer - E lancer - ESC retour', this.width / 2, 460);
     }
 
     /**
