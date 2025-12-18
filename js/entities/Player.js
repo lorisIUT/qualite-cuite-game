@@ -1,25 +1,39 @@
 /**
  * Player - Le personnage contrôlé par le joueur avec inventaire
+ * Supporte le mode multijoueur (local et distant)
  */
 import { Entity } from './Entity.js';
 import { Item } from './Item.js';
 
+// Couleurs des joueurs
+export const PlayerColors = {
+    1: { body: '#e74c3c', stroke: '#c0392b', name: 'Rouge' },
+    2: { body: '#3498db', stroke: '#2980b9', name: 'Bleu' }
+};
+
 export class Player extends Entity {
-    constructor(x, y) {
+    constructor(x, y, playerIndex = 1) {
         super(x, y, 40, 40);
-        this.baseSpeed = 220; // vitesse de base
+        this.playerIndex = playerIndex;
+        this.baseSpeed = 220;
         this.direction = 'down';
+
+        // Couleur selon l'index
+        this.colors = PlayerColors[playerIndex] || PlayerColors[1];
 
         // Inventaire (jusqu'à 3 items)
         this.inventory = [];
         this.maxInventory = 3;
 
         // Multiplicateur de vitesse par item porté
-        this.speedPenaltyPerItem = 0.25; // -25% par item
+        this.speedPenaltyPerItem = 0.25;
 
         // Animation
         this.animationTime = 0;
         this.bobAmount = 0;
+
+        // Mode réseau
+        this.isRemote = false;
     }
 
     /**
@@ -27,13 +41,16 @@ export class Player extends Entity {
      */
     getCurrentSpeed() {
         const penalty = 1 - (this.inventory.length * this.speedPenaltyPerItem);
-        return this.baseSpeed * Math.max(0.4, penalty); // minimum 40% de vitesse
+        return this.baseSpeed * Math.max(0.4, penalty);
     }
 
     /**
-     * Met à jour la position du joueur selon les inputs
+     * Met à jour la position du joueur selon les inputs (joueur local)
      */
     update(deltaTime, inputManager, gameMap) {
+        // Les joueurs distants sont mis à jour via updateFromNetwork
+        if (this.isRemote) return;
+
         let dx = 0;
         let dy = 0;
 
@@ -84,6 +101,36 @@ export class Player extends Entity {
         } else {
             this.bobAmount = 0;
         }
+    }
+
+    /**
+     * Met à jour depuis les données réseau (joueur distant)
+     */
+    updateFromNetwork(data) {
+        if (!data) return;
+
+        this.x = data.x;
+        this.y = data.y;
+        this.direction = data.direction;
+        this.bobAmount = data.bobAmount || 0;
+
+        // Reconstruit l'inventaire depuis les types
+        if (data.inventoryTypes) {
+            this.inventory = data.inventoryTypes.map(type => new Item(type));
+        }
+    }
+
+    /**
+     * Retourne les données pour la synchronisation réseau
+     */
+    getNetworkData() {
+        return {
+            x: this.x,
+            y: this.y,
+            direction: this.direction,
+            bobAmount: this.bobAmount,
+            inventoryTypes: this.inventory.map(item => item.type)
+        };
     }
 
     /**
@@ -167,12 +214,12 @@ export class Player extends Entity {
         ctx.ellipse(cx, this.y + this.height - 5, shadowSize, 6, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Corps (tablier)
-        ctx.fillStyle = '#e74c3c';
+        // Corps (tablier) avec couleur du joueur
+        ctx.fillStyle = this.colors.body;
         ctx.beginPath();
         ctx.ellipse(cx, cy + 5, 14, 16, 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#c0392b';
+        ctx.strokeStyle = this.colors.stroke;
         ctx.lineWidth = 2;
         ctx.stroke();
 
@@ -181,6 +228,13 @@ export class Player extends Entity {
         ctx.fillRect(cx - 8, cy, 16, 14);
         ctx.strokeStyle = '#ddd';
         ctx.strokeRect(cx - 8, cy, 16, 14);
+
+        // Numéro du joueur sur le tablier
+        ctx.fillStyle = this.colors.body;
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(this.playerIndex.toString(), cx, cy + 7);
 
         // Tête
         ctx.fillStyle = '#fdbf6f';
@@ -191,12 +245,17 @@ export class Player extends Entity {
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Toque de chef
+        // Toque de chef (avec couleur du joueur)
         ctx.fillStyle = '#fff';
         ctx.beginPath();
         ctx.ellipse(cx, cy - 22, 10, 6, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillRect(cx - 8, cy - 28, 16, 10);
+
+        // Bandeau coloré sur la toque
+        ctx.fillStyle = this.colors.body;
+        ctx.fillRect(cx - 8, cy - 23, 16, 3);
+
         ctx.strokeStyle = '#ddd';
         ctx.lineWidth = 1;
         ctx.beginPath();

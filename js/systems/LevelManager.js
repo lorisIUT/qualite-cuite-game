@@ -55,8 +55,18 @@ export class LevelManager {
         this.customersLost = 0;
         this.maxLostCustomers = 5;
 
+        // Multiplayer
+        this.isMultiplayer = false;
+
         // Callbacks
         this.onStateChange = null;
+    }
+
+    /**
+     * Active le mode multijoueur
+     */
+    setMultiplayer(enabled) {
+        this.isMultiplayer = enabled;
     }
 
     /**

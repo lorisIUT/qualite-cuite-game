@@ -243,4 +243,60 @@ export class CustomerManager {
     getWaitingCount() {
         return this.customers.filter(c => !c.satisfied && !c.angry).length;
     }
+
+    /**
+     * Retourne les données des clients pour la sync réseau (HOST)
+     */
+    getCustomersData() {
+        return this.customers.map(c => ({
+            x: c.x,
+            y: c.y,
+            positionIndex: c.positionIndex,
+            order: { ...c.order },
+            originalOrder: { ...c.originalOrder },
+            patience: c.patience,
+            maxPatience: c.maxPatience,
+            satisfied: c.satisfied,
+            angry: c.angry
+        }));
+    }
+
+    /**
+     * Met à jour les clients depuis les données réseau (CLIENT)
+     */
+    updateFromNetwork(customersData) {
+        if (!customersData) return;
+
+        // Sync le nombre de clients
+        while (this.customers.length > customersData.length) {
+            const removed = this.customers.pop();
+            if (removed) {
+                this.customerPositions[removed.positionIndex].occupied = false;
+            }
+        }
+
+        // Met à jour ou crée les clients
+        customersData.forEach((data, index) => {
+            if (index < this.customers.length) {
+                // Update existing
+                const customer = this.customers[index];
+                customer.x = data.x;
+                customer.y = data.y;
+                customer.order = { ...data.order };
+                customer.patience = data.patience;
+                customer.satisfied = data.satisfied;
+                customer.angry = data.angry;
+            } else {
+                // Create new
+                const customer = new Customer(data.x, data.y, data.originalOrder, data.maxPatience);
+                customer.positionIndex = data.positionIndex;
+                customer.patience = data.patience;
+                customer.satisfied = data.satisfied;
+                customer.angry = data.angry;
+                customer.order = { ...data.order };
+                this.customers.push(customer);
+                this.customerPositions[data.positionIndex].occupied = true;
+            }
+        });
+    }
 }
